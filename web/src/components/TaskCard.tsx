@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import type { Task } from '../lib/api';
 import { deleteTask } from '../lib/api';
 
@@ -23,6 +24,10 @@ export default function TaskCard({ task }: TaskCardProps) {
     mutationFn: () => deleteTask(task.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', task.listId] });
+      toast.success('Task deleted');
+    },
+    onError: () => {
+      toast.error('Failed to delete task');
     },
   });
 

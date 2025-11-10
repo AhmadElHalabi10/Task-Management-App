@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import type {
   DragEndEvent,
@@ -25,6 +25,7 @@ import TaskCard from './TaskCard';
 export default function Board() {
   const queryClient = useQueryClient();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const boardScrollRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -40,7 +41,18 @@ export default function Board() {
     queryFn: fetchProjects,
   });
 
-  const project: Project | undefined = projects?.[0];
+  // Get last project from localStorage or use first
+  const lastProjectId = localStorage.getItem('lastProjectId');
+  const project: Project | undefined = lastProjectId
+    ? projects?.find((p) => p.id === lastProjectId) || projects?.[0]
+    : projects?.[0];
+
+  // Save last project to localStorage
+  useEffect(() => {
+    if (project?.id) {
+      localStorage.setItem('lastProjectId', project.id);
+    }
+  }, [project?.id]);
 
   // Fetch lists for the project
   const { data: lists = [] } = useQuery({
@@ -82,6 +94,29 @@ export default function Board() {
       socket.emit('leave', project.id);
     };
   }, [project, queryClient]);
+
+  // Restore and save scroll position
+  useEffect(() => {
+    if (project?.id && boardScrollRef.current) {
+      const savedScroll = localStorage.getItem(`boardScroll-${project.id}`);
+      if (savedScroll) {
+        boardScrollRef.current.scrollLeft = parseInt(savedScroll, 10);
+      }
+
+      const handleScroll = () => {
+        if (boardScrollRef.current) {
+          localStorage.setItem(
+            `boardScroll-${project.id}`,
+            boardScrollRef.current.scrollLeft.toString()
+          );
+        }
+      };
+
+      const scrollElement = boardScrollRef.current;
+      scrollElement.addEventListener('scroll', handleScroll);
+      return () => scrollElement.removeEventListener('scroll', handleScroll);
+    }
+  }, [project?.id, lists]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = allTasks.find((t) => t.id === event.active.id);
@@ -130,10 +165,38 @@ export default function Board() {
     }
   };
 
+  // Loading skeleton
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-white text-lg">Loading project...</p>
+      <div className="p-6">
+        <div className="h-8 w-48 bg-gray-700 rounded mb-6 animate-pulse"></div>
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-gray-100 rounded-lg p-3 w-72 flex-shrink-0">
+              <div className="h-6 w-32 bg-gray-300 rounded mb-3 animate-pulse"></div>
+              <div className="space-y-2">
+                <div className="h-20 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-20 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (lists.length === 0) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold text-white mb-6">{project.name}</h1>
+        <div className="flex items-center justify-center h-96 bg-gray-800 rounded-lg">
+          <div className="text-center">
+            <div className="text-6xl mb-4">📋</div>
+            <h2 className="text-xl font-semibold text-white mb-2">No lists yet</h2>
+            <p className="text-gray-400">Create your first list to get started</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -146,7 +209,7 @@ export default function Board() {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div ref={boardScrollRef} className="flex gap-4 overflow-x-auto pb-4">
           {lists.map((list) => {
             const tasks = allTasks.filter((t) => t.listId === list.id);
             return <Column key={list.id} list={list} tasks={tasks} />;

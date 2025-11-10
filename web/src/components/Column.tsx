@@ -5,6 +5,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import type { List, Task } from '../lib/api';
 import { createTask } from '../lib/api';
 import TaskCard from './TaskCard';
@@ -33,6 +34,10 @@ export default function Column({ list, tasks }: ColumnProps) {
       setTitle('');
       setDescription('');
       setIsAdding(false);
+      toast.success('Task created successfully');
+    },
+    onError: () => {
+      toast.error('Failed to create task');
     },
   });
 
@@ -48,9 +53,16 @@ export default function Column({ list, tasks }: ColumnProps) {
       <h3 className="font-semibold text-gray-800 mb-3 px-2">{list.name}</h3>
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div ref={setNodeRef} className="min-h-[100px]">
-          {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
+          {tasks.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              <div className="text-2xl mb-2">📝</div>
+              <p>No tasks yet</p>
+            </div>
+          ) : (
+            tasks.map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))
+          )}
         </div>
       </SortableContext>
 
