@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import { Server as SocketIOServer } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
@@ -93,7 +93,7 @@ const moveTaskSchema = z.object({
 });
 
 // Middleware to get user from header
-const getUserFromHeader = async (request: any, reply: any) => {
+const getUserFromHeader = async (request: FastifyRequest, reply: FastifyReply) => {
   const username = request.headers['x-username'];
   if (!username) {
     reply.code(401).send({ error: 'x-username header is required' });
@@ -195,7 +195,7 @@ fastify.post('/api/users', async (request, reply) => {
     });
 
     return reply.code(201).send(user);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: 'Validation error', details: error.errors });
     }
@@ -233,7 +233,7 @@ fastify.post('/api/projects', async (request, reply) => {
     });
 
     return reply.code(201).send(project);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: 'Validation error', details: error.errors });
     }
@@ -350,7 +350,7 @@ fastify.post('/api/lists', async (request, reply) => {
     });
 
     return reply.code(201).send(list);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: 'Validation error', details: error.errors });
     }
@@ -425,7 +425,7 @@ fastify.post('/api/tasks', async (request, reply) => {
     io.to(list.projectId).emit('task:created', task);
 
     return reply.code(201).send(task);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: 'Validation error', details: error.errors });
     }
@@ -517,7 +517,7 @@ fastify.patch('/api/tasks/:id', async (request, reply) => {
     io.to(existingTask.list.projectId).emit('task:updated', task);
 
     return reply.send(task);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: 'Validation error', details: error.errors });
     }
@@ -623,7 +623,7 @@ fastify.post('/api/tasks/:id/move', async (request, reply) => {
     io.to(existingTask.list.projectId).emit('task:moved', task);
 
     return reply.send(task);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: 'Validation error', details: error.errors });
     }
@@ -643,7 +643,7 @@ const start = async () => {
     const port = parseInt(process.env.PORT || '3000', 10);
     await fastify.listen({ port, host: '0.0.0.0' });
     console.log(`Server listening on port ${port}`);
-  } catch (err) {
+  } catch (err: any) {
     fastify.log.error(err);
     process.exit(1);
   }
