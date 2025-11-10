@@ -12,7 +12,7 @@ const fastify = Fastify({
 // Socket.IO setup
 const io = new SocketIOServer(fastify.server, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     credentials: true,
   },
 });
@@ -636,12 +636,13 @@ const start = async () => {
   try {
     // Register CORS
     await fastify.register(cors, {
-      origin: 'http://localhost:5173',
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       credentials: true,
     });
 
-    await fastify.listen({ port: 3000, host: '0.0.0.0' });
-    console.log('Server listening on http://localhost:3000');
+    const port = parseInt(process.env.PORT || '3000', 10);
+    await fastify.listen({ port, host: '0.0.0.0' });
+    console.log(`Server listening on port ${port}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
