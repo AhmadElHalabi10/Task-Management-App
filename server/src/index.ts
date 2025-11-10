@@ -87,6 +87,11 @@ const updateTaskSchema = z.object({
   order: z.number().optional(),
 });
 
+const moveTaskSchema = z.object({
+  listId: z.string(),
+  order: z.number(),
+});
+
 // Middleware to get user from header
 const getUserFromHeader = async (request: any, reply: any) => {
   const username = request.headers['x-username'];
@@ -136,13 +141,15 @@ fastify.get('/', async (request, reply) => {
     version: '1.0.0',
     endpoints: {
       users: {
+        'GET /api/me': 'Ensure/create user from x-username header',
         'POST /api/users': 'Create a new user',
         'GET /api/users/me': 'Get current user (requires x-username header)',
       },
       projects: {
         'POST /api/projects': 'Create a new project',
-        'GET /api/projects': 'Get all projects',
+        'GET /api/projects': 'Get all projects for current user',
         'GET /api/projects/:id': 'Get a specific project',
+        'GET /api/projects/:id/board': 'Get project board with lists and tasks',
       },
       lists: {
         'POST /api/lists': 'Create a new list',
@@ -151,7 +158,8 @@ fastify.get('/', async (request, reply) => {
       tasks: {
         'POST /api/tasks': 'Create a new task',
         'GET /api/tasks/:listId': 'Get all tasks for a list',
-        'PATCH /api/tasks/:id': 'Update a task',
+        'PATCH /api/tasks/:id': 'Update title/description',
+        'POST /api/tasks/:id/move': 'Move task to new list/order',
         'DELETE /api/tasks/:id': 'Delete a task',
       },
     },
@@ -159,6 +167,14 @@ fastify.get('/', async (request, reply) => {
       events: ['task:create', 'task:update', 'task:delete', 'task:move'],
     },
   };
+});
+
+// GET /api/me - Ensure/create user from x-username header
+fastify.get('/api/me', async (request, reply) => {
+  const user = await getUserFromHeader(request, reply);
+  if (!user) return;
+
+  return reply.send(user);
 });
 
 // Users
@@ -271,6 +287,38 @@ fastify.get('/api/projects/:id', async (request, reply) => {
   }
 
   return reply.send(project);
+});
+
+// GET /api/projects/:id/board - Get project board with lists and tasks ordered
+fastify.get('/api/projects/:id/board', async (request, reply) => {
+  const user = await getUserFromHeader(request, reply);
+  if (!user) return;
+
+  const { id } = request.params as { id: string };
+
+  const project = await prisma.project.findFirst({
+    where: { id, ownerId: user.id },
+    include: {
+      lists: {
+        include: {
+          tasks: {
+            orderBy: { order: 'asc' },
+          },
+        },
+        orderBy: { order: 'asc' },
+      },
+    },
+  });
+
+  if (!project) {
+    return reply.code(404).send({ error: 'Project not found' });
+  }
+
+  return reply.send({
+    id: project.id,
+    name: project.name,
+    lists: project.lists,
+  });
 });
 
 // Lists
@@ -514,6 +562,73 @@ fastify.delete('/api/tasks/:id', async (request, reply) => {
   io.to(task.list.projectId).emit('task:deleted', { taskId: id });
 
   return reply.code(204).send();
+});
+
+// POST /api/tasks/:id/move - Move task to new list and order
+fastify.post('/api/tasks/:id/move', async (request, reply) => {
+  try {
+    const user = await getUserFromHeader(request, reply);
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const body = moveTaskSchema.parse(request.body);
+
+    // Verify task exists and user owns the project
+    const existingTask = await prisma.task.findFirst({
+      where: {
+        id,
+        list: {
+          project: {
+            ownerId: user.id,
+          },
+        },
+      },
+      include: {
+        list: {
+          include: {
+            project: true,
+          },
+        },
+      },
+    });
+
+    if (!existingTask) {
+      return reply.code(404).send({ error: 'Task not found' });
+    }
+
+    // Verify the new list exists and user owns its project
+    const newList = await prisma.list.findFirst({
+      where: {
+        id: body.listId,
+        project: {
+          ownerId: user.id,
+        },
+      },
+    });
+
+    if (!newList) {
+      return reply.code(404).send({ error: 'Target list not found' });
+    }
+
+    // Update the task
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        listId: body.listId,
+        order: body.order,
+      },
+    });
+
+    // Emit socket event
+    io.to(existingTask.list.projectId).emit('task:moved', task);
+
+    return reply.send(task);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return reply.code(400).send({ error: 'Validation error', details: error.errors });
+    }
+    throw error;
+  }
 });
 
 // Start server
