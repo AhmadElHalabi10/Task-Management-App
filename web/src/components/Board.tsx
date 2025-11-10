@@ -17,7 +17,7 @@ import {
   fetchTasks,
   updateTask,
 } from '../lib/api';
-import type { Project, List, Task } from '../lib/api';
+import type { Project, Task } from '../lib/api';
 import { getSocket } from '../store/socket';
 import Column from './Column';
 import TaskCard from './TaskCard';
@@ -79,12 +79,12 @@ export default function Board() {
 
     socket.emit('join', project.id);
 
-    socket.on('task:moved', (data: Task) => {
+    socket.on('task:moved', () => {
       // Invalidate relevant queries to refetch data
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     });
 
-    socket.on('task:updated', (data: Task) => {
+    socket.on('task:updated', () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     });
 
